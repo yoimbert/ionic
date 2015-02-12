@@ -119,6 +119,7 @@ var COLLECTION_REPEAT_ATTR_HEIGHT_ERROR = "collection-repeat expected attribute 
 var COLLECTION_REPEAT_ATTR_WIDTH_ERROR = "collection-repeat expected attribute collection-item-width to be a an expression that returns a number (in pixels) or percentage.";
 var COLLECTION_REPEAT_ATTR_REPEAT_ERROR = "collection-repeat expected expression in form of '_item_ in _collection_[ track by _id_]' but got '%'";
 
+/*
 IonicModule
 .directive('collectionRepeat', [
   '$collectionRepeatManager',
@@ -307,3 +308,4 @@ function collectionRepeatSrcDirective(ngAttrName, attrName) {
     };
   }];
 }
+*/

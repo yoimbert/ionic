@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html ng-app="ionic">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width">
+
+    <title>Sample UL</title>
+
+    <link  href="/dist/css/ionic.css" rel="stylesheet">
+    <script src="/dist/js/ionic.bundle.js"></script>
+  </head>
+
+  <body ng-controller="MainCtrl">
+    <ion-header-bar class="bar-positive">
+      <h1 class="title">Hi</h1>
+      <a class="button" ng-click="scrollBottom(true)">
+        Bottom
+      </a>
+      <a class="button" ng-click="openModal()">
+        MODAL
+      </a>
+    </ion-header-bar>
+    <ion-content>
+      <ion-refresher on-refresh="loadMore()"></ion-refresher>
+
+      <ion-list>
+        <ion-item
+          class="item"
+          collection-repeat="item in items" style="display:flex;align-items:center;justify-content:center;">
+          <h2>{{item}}</h2>
+        </ion-item>
+      </ion-list>
+
+      <ion-infinite-scroll on-infinite="loadMore()"></ion-infinite-scroll>
+
+    </ion-content>
+  <script>
+angular.module('ionic').controller('MainCtrl',MainCtrl)
+function MainCtrl($scope, $ionicScrollDelegate, $timeout, $q, $ionicLoading, $ionicModal) {
+  $scope.items = [];
+  function addImage() {
+    var i = $scope.items.length;
+    $scope.items.push({
+      text: 'Item ' + i,
+      image: 'http://placekitten.com/'+(100+50%i)+'/'+(100+50%i)
+    });
+  }
+  for (var i = 0; i < 20; i++) addImage();
+
+  $scope.scrollBottom = function() {
+    $ionicScrollDelegate.scrollBottom(true);
+  };
+
+  $scope.loadMore = function() {
+    $timeout(function() {
+      var n = 100;//1 + Math.floor(4*Math.random());
+      for (var i = 0; i < n; i++) addImage();
+      $scope.$broadcast('scroll.infiniteScrollComplete');
+      $scope.$broadcast('scroll.refreshComplete');
+    }, 1);
+  };
+
+  $scope.openModal = function() {
+    $ionicModal.fromTemplate('<ion-modal-view>hello</ion-modal-view>').show();
+  };
+}
+  </script>
+  <style>
+</body>
+</html>
