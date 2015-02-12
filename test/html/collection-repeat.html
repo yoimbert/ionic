@@ -16,9 +16,9 @@
       <a class="button" ng-click="scrollBottom(true)">
         Bottom
       </a>
-      <a class="button" ng-click="openModal()">
-        MODAL
-      </a>
+      <!-- <a class="button" ng-click="openModal()"> -->
+      <!--   MODAL -->
+      <!-- </a> -->
     </ion-header-bar>
     <ion-content>
       <ion-refresher on-refresh="loadMore()"></ion-refresher>
@@ -34,7 +34,13 @@
       <ion-infinite-scroll on-infinite="loadMore()"></ion-infinite-scroll>
 
     </ion-content>
+    <div id="stats" style="pointer-events: none; position: absolute; bottom: 0; left: 0; right: 0; height: 100px; background: rgba(0,0,0,0.3); color: white;">
+    </div>
   <script>
+var stats = document.getElementById('stats');
+setInterval(function() {
+  stats.innerHTML = outputTimes();
+}, 750);
 angular.module('ionic').controller('MainCtrl',MainCtrl)
 function MainCtrl($scope, $ionicScrollDelegate, $timeout, $q, $ionicLoading, $ionicModal) {
   $scope.items = [];
@@ -66,5 +72,7 @@ function MainCtrl($scope, $ionicScrollDelegate, $timeout, $q, $ionicLoading, $io
 }
   </script>
   <style>
+.item{background:red;}
+  </style>
 </body>
 </html>

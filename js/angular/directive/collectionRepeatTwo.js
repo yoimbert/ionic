@@ -18,7 +18,7 @@ function CollectionRepeatDirective(colRepeatManager) {
     node.parentNode.replaceChild(container[0], node);
 
     var data = [];
-    for (var i = 0; i < 1000; i++) data.push(i);
+    for (var i = 0; i < 10000; i++) data.push(i);
 
     var repeatCtrl = new colRepeatManager({
       scope: scope,
@@ -35,6 +35,7 @@ function CollectionRepeatDirective(colRepeatManager) {
 
 RepeatManagerFactory.$inject = ['$rootScope', '$window'];
 function RepeatManagerFactory($rootScope, $window) {
+  var EMPTY_DIMENSION = { left: 0, top: 0, height: 0, width: 0, bottom: 0, right: 0 };
 
   return function RepeatController(options) {
     var containerNode = options.containerNode;
@@ -44,62 +45,151 @@ function RepeatManagerFactory($rootScope, $window) {
     var scrollView = options.scrollView;
     var transclude = options.transclude;
     var keyExpression = options.keyExpression;
+    var estimatedHeight = 50;
+    var estimatedWidth = 50;
 
-    var estimatedHeight = options.estimatedHeight;
-    var estimatedWidth = 80;
+    var isGridView = !!estimatedWidth;
 
     // TODO getEstimatedWidth getEstimatedHeight;
 
     var heightGetter = options.heightGetter || function(index) {
-      return 60 + 2 * (index % 20);
+      return 60;
     };
     var widthGetter = options.widthGetter || function(index) {
-      return 60 + 2 * (index % 20);
+      return 60;
     };
 
     var renderStartIndex = -1;
     var renderEndIndex = -1;
-    var renderScrollValue = -1;
     var oldRenderStartIndex = -1;
-    var oldRenderScrollValue = -1;
+    var oldScrollTop = -1;
+    var renderBottomBoundary = -1;
+    var renderTopBoundary = -1;
 
-    var RepeatItem = setupRepeatItemPrototype();
     var itemsPool = [];
     var itemsLeaving = [];
     var itemsShownMap = {};
 
-    var scrollWidth;
-    var scrollHeight;
+    var itemDimensions = [];
+    var itemDimensionsIndex;
+    resetDimensionsPool();
+
     var estimatedItemsPerRow;
-    var itemDimensions;
 
     angular.element($window).on('resize', onResize);
 
-    // INITIALIZATION
-    onResize():
-
     function onResize() {
-      scrollWidth = scrollView.__clientWidth;
-      estimatedItemsPerRow = estimatedWidth ?
-        Math.floor(scrollWidth / estimatedWidth) :
+      // TODO are item dimensions flexible?
+      itemDimensionsIndex = 0;
+      estimatedItemsPerRow = isGridView ?
+        Math.max(1, Math.floor(scrollView.__clientWidth / estimatedWidth)) :
         1;
     }
 
-    function getEstimatedLeft(index) {
-      return (index % estimatedItemsPerRow) * estimatedWidth;
-    }
-    function getEstimatedTop(index) {
-      return Math.floor(index / estimatedItemsPerRow) * estimatedHeight;
-    }
-    function getEstimatedIndex(scrollValue) {
-      Math.floor(scrollValue / estimatedHeight) + Math.floor(scrollWidth / estimatedWidth);
+    var getEstimatedLeft;
+    var getEstimatedTop;
+    var getEstimatedIndex;
+    var calculateDimensions;
+    if (isGridView) {
+
+      getEstimatedLeft = function(index) {
+        return (index % estimatedItemsPerRow) * estimatedWidth;
+      };
+      getEstimatedTop = function(index) {
+        return index * Math.floor(estimatedHeight / estimatedItemsPerRow);
+      };
+      getEstimatedIndex = function(scrollValue) {
+        return Math.floor(scrollValue / estimatedHeight) * estimatedItemsPerRow;
+      };
+
+      calculateDimensions = function(index) {
+        var i, prevDimension, dimension;
+        for (i = itemDimensionsIndex; i <= index && (dimension = itemDimensions[i]); i++) {
+          prevDimension = itemDimensions[i - 1] || EMPTY_DIMENSION;
+          dimension.width = Math.min(widthGetter(i), scrollView.__clientWidth);
+          dimension.left = prevDimension.right;
+
+          if (i === 0 || dimension.left + dimension.width > scrollView.__clientWidth) {
+            dimension.rowStartIndex = i;
+            dimension.left = 0;
+            dimension.height = heightGetter(i);
+            dimension.top = prevDimension.bottom;
+          } else {
+            dimension.rowStartIndex = prevDimension.rowStartIndex;
+            dimension.height = prevDimension.height;
+            dimension.top = prevDimension.top;
+          }
+          dimension.bottom = dimension.top + dimension.height;
+          dimension.right = dimension.left + dimension.width;
+        }
+      };
+
+    } else {
+
+      getEstimatedLeft = function() {
+        return 0;
+      }
+      getEstimatedTop = function(index) {
+        return index * estimatedHeight;
+      };
+      getEstimatedIndex = function(scrollValue) {
+        return Math.floor(scrollValue / estimatedHeight);
+      };
+      calculateDimensions = function(index) {
+        var i, prevDimension, dimension;
+        for (i = itemDimensionsIndex; i <= index && (dimension = itemDimensions[i]); i++) {
+          prevDimension = itemDimensions[i - 1] || EMPTY_DIMENSION;
+          dimension.height = heightGetter(i);
+          dimension.width = scrollView.__clientWidth;
+          dimension.top = prevDimension.bottom;
+          dimension.left = 0;
+          dimension.right = dimension.left + dimension.width;
+          dimension.bottom = dimension.top + dimension.height;
+        }
+      }
+
     }
 
-    function getActualDimensions(index) {
+    // Get the dimensions at index. {width, height, left, top}.
+    // We start with no dimensions calculated, then any time dimensions are asked for at an
+    // index we calculate dimensions up to there.
+    var scrollViewSetDimensions = function() {
+      var start = getNow();
+      scrollView.setDimensions(null, null, null, scrollView.options.getContentHeight(), true);
+    };
+    var debouncedScrollViewSetDimensions = ionic.debounce(scrollViewSetDimensions, 75, true);
+    function getDimensions(index) {
+      index = Math.min(index, data.length - 1);
+
+      if (itemDimensionsIndex < index) {
+        if (index > data.length * 0.9) {
+          // By this point, we're near the bottom of the list and need to calculate everything
+          // or the scrollbar will look wrong
+          calculateDimensions(data.length - 1);
+          scrollViewSetDimensions();
+          itemDimensionsIndex = data.length - 1;
+        } else {
+          calculateDimensions(index);
+          itemDimensionsIndex = index;
+          debouncedScrollViewSetDimensions();
+        }
+
+      }
+      return itemDimensions[index];
+    }
+
+    function resetDimensionsPool() {
+      // Make sure itemDimensions has as many items as data.length.
+      // This is to be sure we don't have to allocate objects while scrolling.
+      for (i = itemDimensions.length, len = data.length; i < len; i++) {
+        itemDimensions.push({ left: 0, top: 0, width: 0, height: 0, top: 0, bottom: 0 });
+      }
+      itemDimensionsIndex = 0;
     }
 
     scrollView.options.getContentHeight = function() {
-      return estimatedHeight * data.length;
+      return (itemDimensions[itemDimensionsIndex].bottom || 0) +
+        getEstimatedTop(data.length - itemDimensionsIndex - 1);
     };
     scrollView.__$callback = scrollView.__callback;
 
@@ -107,9 +197,9 @@ function RepeatManagerFactory($rootScope, $window) {
     scrollView.__callback = function(transformLeft, transformTop, zoom, wasResize) {
       var scrollTop = Math.max(0, Math.min(scrollView.__maxScrollTop, scrollView.__scrollTop));
 
-      if (renderScrollValue === -1 ||
-          scrollTop > renderScrollValue + estimatedHeight ||
-          scrollTop < renderScrollValue - estimatedHeight) {
+      if (renderStartIndex === -1 ||
+          scrollTop + scrollView.__clientHeight > renderBottomBoundary ||
+          scrollTop < renderTopBoundary) {
         render();
       }
       scrollView.__$callback(transformLeft, transformTop, zoom, wasResize);
@@ -120,57 +210,26 @@ function RepeatManagerFactory($rootScope, $window) {
       itemsPool.push(new RepeatItem());
     }
 
-    function calculateEstimatedDimensions() {
-      itemDimensions.length = 0;
-      var i, ii;
-      // LIST VIEW: FASTER
-      if (!estimatedWidth) {
-        var currentLeft, currentTop;
-        for (i = 0, ii = data.length; i < ii; i++) {
-          itemDimensions.push({
-            top: estimatedHeight * i,
-            left: 0,
-            width: 1,
-            height: estimatedHeight,
-            $estimated: true
-          });
+    function scrollValueToIndex(scrollTop, prevScrollTop, prevIndex) {
+      if (prevIndex === -1) return 0;
+      var dim;
+      var i, len;
+      //scrolling down
+      if (scrollTop >= prevScrollTop) {
+        for (i = prevIndex, len = data.length; i < len; i++) {
+          dim = getDimensions(i);
+          if (dim.bottom >= scrollTop) return i;
         }
-      // GRID VIEW: SLOWER
+      //scrolling up
       } else {
-        var itemsPerRow = Math.floor(scrollView.__clientWidth / estimatedWidth);
-        for (i = 0, ii = data.length; i < ii; i++) {
-          itemDimensions.push({
-            top: estimatedHeight * Math.floor(i / itemsPerRow),
-            left: i % itemsPerRow,
-            width: estimatedWidth,
-            height: estimatedHeight,
-            $estimated: true
-          });
+        for (i = prevIndex; i >= 0; i--) {
+          dim = getDimensions(i);
+          if (dim.top <= scrollTop) {
+            return isGridView ? dim.rowStartIndex : i;
+          }
         }
       }
-    }
-
-    // Add rowDelta number of rows to the index. Eg if there are 3 items per row and we are
-    // at index 2, it takes 6 indices to advance two rows.
-    // In that case, addRowsToIndex(2, 2) == 8
-    function addRowsToIndex(index, rowDelta) {
-      var direction = rowDelta > 0 ? 1 : -1;
-      var rect;
-      var positionOfRow;
-      rowDelta = Math.abs(rowDelta);
-      do {
-        positionOfRow = heightGetter(index);
-        while ((rect = dimensions[index]) && rect.primaryPos === positionOfRow &&
-               dimensions[index + direction]) {
-          index += direction;
-        }
-      } while (rowDelta--);
-      return index;
-    }
-
-    function scrollValueToIndex(scrollTop, prevScrollTop, prevIndex) {
-      var estimatedStartIndex = Math.floor(scrollTop / estimatedHeight);
-      var direction = scrollTop > prevScrollTop ? 1 : -1;
+      return i;
     }
 
     /*
@@ -180,68 +239,124 @@ function RepeatManagerFactory($rootScope, $window) {
      * Build out dimensions starting at data index, ending at renderEndIndex
      */
 
+    var totalPlacementTime = 0;
+    var totalCalcTime = 0;
+    var totalRenderTime = 0;
+    var totalRenders = 0;
+
+    var getNow = window.performance && window.performance.now ?
+      function() { return window.performance.now(); } :
+      function() { return +Date.now(); };
     function render() {
-      // - Get scrollValue
-      //
-      // - Get height of scroll
-      //
-      // - Get the data index matching scrollValue
-      //
-      // - Calculate, starting at startIndex with a small buffer,
-      //   which indices need to be displayed & their dimensions
-      //
-      // - Find which indices are now OUT
-      //
-      // - Find which indices need to be IN
-      //
-      // - Bring items IN
-      //   - If there are any to use that were OUT, use those
-      //   - Otherwise, pull from the pool if it's not empty
-      //   - Otherwise, add an item to the pool
-      //
-      // - Cleanup all leftover OUT items
-      var i, item;
+      if (!render.firstDone) {
+        onResize();
+        render.firstDone = true;
+      }
+      var i;
+      var item;
+      var dim;
       var scrollTop = scrollView.__scrollTop;
-      var scrollHeight = scrollView.__clientHeight;
-      var scrollWidth = scrollView.__clientWidth;
+      var scrollViewBottom = scrollTop + scrollView.__clientHeight;
 
-      renderStartIndex = scrollValueToIndex(scrollTop, oldRenderScrollValue, oldRenderStartIndex);
+      var startTime = getNow();
 
-      renderStartIndex = Math.floor(scrollTop / estimatedHeight);
-      renderEndIndex = renderStartIndex + Math.ceil(scrollHeight / estimatedHeight);
+      // Calculate as many dim as we estimate we'll need
+      getDimensions( getEstimatedIndex(scrollViewBottom) * 2 );
 
-      // Buffer of two on each end
-      renderStartIndex = Math.max(0, renderStartIndex - 2);
-      renderEndIndex = Math.min(data.length, renderEndIndex);
-      renderScrollValue = renderStartIndex * estimatedHeight;
+      renderStartIndex = scrollValueToIndex(scrollTop, oldScrollTop, oldRenderStartIndex);
+      renderStartIndex = Math.min(Math.max(0, renderStartIndex), data.length - 1);
+
+      renderEndIndex = renderStartIndex + 1;
+      while (renderEndIndex < data.length - 1 &&
+             getDimensions(renderEndIndex).bottom <= scrollViewBottom) {
+        renderEndIndex++;
+      }
+      if (isGridView) {
+        var top = getDimensions(renderEndIndex).top;
+        while (renderEndIndex < data.length - 1 && getDimensions(renderEndIndex + 1).top === top) {
+          renderEndIndex++;
+        }
+      }
+      renderEndIndex = Math.min(data.length - 1, renderEndIndex);
+
+      renderTopBoundary = getDimensions(renderStartIndex).top;
+      renderBottomBoundary = getDimensions(renderEndIndex).bottom;
+
+      var calcEndTime = getNow();
+      totalCalcTime += (calcEndTime - startTime);
+
+      var renderStartTime = getNow();
 
       for (i in itemsShownMap) {
-        if (i < renderStartIndex || i > renderEndIndex) {
+        if (+i < renderStartIndex || +i > renderEndIndex) {
           item = itemsShownMap[i];
           delete itemsShownMap[i];
-          item.onLeave();
           itemsLeaving.push(item);
         }
       }
+
       for (i = renderStartIndex; i <= renderEndIndex; i++) {
+
         if (!itemsShownMap[i]) {
           itemsShownMap[i] = item = getNextItem();
-          item.onEnter(i);
-          item.node.style[ionic.CSS.TRANSFORM] = 'translate3d(0,' +
-            (renderScrollValue + (i - renderStartIndex) * estimatedHeight) + 'px,0)';
-          item.node.style.height = estimatedHeight + 'px';
-          item.node.style.width = scrollWidth + 'px';
+          dim = itemDimensions[i];
+          var value = data[i];
+
+          item.scope.$index = i;
+          item.scope[keyExpression] = value;
+          item.scope.$first = (i === 0);
+          item.scope.$last = (i === (data.length - 1));
+          item.scope.$middle = !(item.scope.$first || item.scope.$last);
+          item.scope.$odd = !(item.scope.$even = (i&1) === 0);
+
+          //We changed the scope, so digest if needed
+          if (item.scope.$$disconnected) ionic.Utils.reconnectScope(item.scope);
+          if (!$rootScope.$$phase) item.scope.$digest();
+
+          if (item.left !== dim.left || item.top !== dim.top) {
+            item.node.style[ionic.CSS.TRANSFORM] = 'translate3d(' + dim.left + 'px,' +
+              dim.top + 'px,0)';
+            item.left = dim.left;
+            item.top = dim.top;
+          }
+          if (item.width !== dim.width) {
+            item.node.style.width = dim.width + 'px';
+            item.width = dim.width;
+          }
+          if (item.height !== dim.height) {
+            item.node.style.height = dim.height + 'px';
+            item.height = dim.height;
+          }
         }
-      }
-      while (itemsLeaving.length) {
-        item = itemsLeaving.pop();
-        item.onLeave();
-        itemsPool.push(item);
+
       }
 
-      oldRenderScrollValue = renderScrollValue;
+      while (itemsLeaving.length) {
+        item = itemsLeaving.pop();
+        item.node.style[ionic.CSS.TRANSFORM] = 'translate3d(-9999px, -9999px, 0)';
+        ionic.Utils.disconnectScope(item.scope);
+        item.left = item.top = null;
+        itemsPool.push(item);
+      }
+      var renderEndTime = getNow();
+      totalPlacementTime += renderEndTime - renderStartTime;
+      totalRenderTime += renderEndTime - startTime;
+      totalRenders++;
+
+      oldScrollTop = scrollTop;
       oldRenderStartIndex = renderStartIndex;
+
+      if (!render.reset) {
+        totalCalcTime = totalPlacementTime = totalRenderTime = totalRenders = 0;
+        render.reset = true;
+      }
     }
+    function out(n) {
+      return Math.round(n * 10000)/10000;
+    }
+    window.outputTimes = function() {
+      return 'RENDER AVERAGES (ms)<br>- Node placement time: ' + out(totalPlacementTime / totalRenders) + '<br>- Dimension calculation time: ' + out(totalCalcTime / totalRenders) + '<br>- Total render time: ' + out(totalRenderTime / totalRenders);
+    };
 
     function getNextItem() {
       if (itemsLeaving.length)
@@ -251,47 +366,16 @@ function RepeatManagerFactory($rootScope, $window) {
       return new RepeatItem();
     }
 
-    function setupRepeatItemPrototype() {
-      function RepeatItem() {
-        var self = this;
-        this.scope = scope.$new();
-        transclude(this.scope, function(clone) {
-          self.element = clone;
-          self.node = clone[0];
-          self.onLeave();
-          containerNode.appendChild(self.node);
-        });
-      }
-      RepeatItem.prototype = {
-        onLeave: function() {
-          // Lets the default transform styles take over to hide the element
-          this.node.style[ionic.CSS.TRANSFORM] = 'translate3d(-9999px, -9999px, 0)';
-          ionic.Utils.disconnectScope(this.scope);
-        },
-        onEnter: function(index) {
-          if (index > data.length) return;
-          if (this.index === index && this.scope[keyExpression] === value) return;
-          var value = data[index];
-
-          ionic.Utils.reconnectScope(this.scope);
-
-          this.index = this.scope.$index = index;
-          this.scope[keyExpression] = value;
-          this.scope.$first = (index === 0);
-          this.scope.$last = (index === (data.length - 1));
-          this.scope.$middle = !(this.scope.$first || this.scope.$last);
-          this.scope.$odd = !(this.scope.$even = (index&1) === 0);
-
-          //We changed the scope, so digest if needed
-          if (!$rootScope.$$phase) {
-            try {
-              this.scope.$digest();
-            } catch(e){}
-            this.shouldRefreshImages && refreshImages(this.images);
-          }
-        }
-      };
-      return RepeatItem;
+    function RepeatItem() {
+      var self = this;
+      this.scope = scope.$new();
+      transclude(this.scope, function(clone) {
+        self.element = clone;
+        self.node = clone[0];
+        self.node.style[ionic.CSS.TRANSFORM] = 'translate3d(-9999px,-9999px,0)';
+        ionic.Utils.disconnectScope(self.scope);
+        containerNode.appendChild(self.node);
+      });
     }
 
   };

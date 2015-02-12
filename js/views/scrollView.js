@@ -1171,7 +1171,7 @@ ionic.views.Scroll = ionic.views.View.inherit({
     this.__fadeScrollbars('out');
   },
 
-  resize: function() {
+  resize: function(continueScrolling) {
     var self = this;
     if (!self.__container || !self.options) return;
 
@@ -1181,7 +1181,8 @@ ionic.views.Scroll = ionic.views.View.inherit({
       self.__container.clientWidth,
       self.__container.clientHeight,
       self.options.getContentWidth(),
-      self.options.getContentHeight()
+      self.options.getContentHeight(),
+      continueScrolling
     );
   },
   /*
@@ -1274,7 +1275,7 @@ ionic.views.Scroll = ionic.views.View.inherit({
    * @param contentWidth {Integer} Outer width of inner element
    * @param contentHeight {Integer} Outer height of inner element
    */
-  setDimensions: function(clientWidth, clientHeight, contentWidth, contentHeight) {
+  setDimensions: function(clientWidth, clientHeight, contentWidth, contentHeight, continueScrolling) {
     var self = this;
 
     if (!clientWidth && !clientHeight && !contentWidth && !contentHeight) {
@@ -1304,7 +1305,9 @@ ionic.views.Scroll = ionic.views.View.inherit({
     self.__resizeScrollbars();
 
     // Refresh scroll position
-    self.scrollTo(self.__scrollLeft, self.__scrollTop, true, null, true);
+    if (!continueScrolling) {
+      self.scrollTo(self.__scrollLeft, self.__scrollTop, true, null, true);
+    }
 
   },
 
@@ -2166,15 +2169,11 @@ ionic.views.Scroll = ionic.views.View.inherit({
     clearTimeout(self.__sizerTimeout);
 
     var sizer = function() {
-      self.resize();
-
-      // if ((self.options.scrollingX && !self.__maxScrollLeft) || (self.options.scrollingY && !self.__maxScrollTop)) {
-      //   //self.__sizerTimeout = setTimeout(sizer, 1000);
-      // }
+      self.resize(true);
     };
 
     sizer();
-    self.__sizerTimeout = setTimeout(sizer, 1000);
+    self.__sizerTimeout = setTimeout(sizer, 500);
   },
 
   /*
