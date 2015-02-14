@@ -25,16 +25,20 @@
 
       <ion-list>
         <ion-item
-          class="item"
-          collection-repeat="item in items" style="display:flex;align-items:center;justify-content:center;">
-          <h2>{{item}}</h2>
+          class="item item-avatar"
+          collection-repeat="item in items"
+          collection-item-height="($index % 3) ? 75 : 150"
+          collection-item-width="80 + ($index % 50)">
+            <img ng-src="http://lorempixel.com/{{90+($index%30)}}/90">
+            <h2>{{item.text}}</h2>
+            <p>text text text</p>
         </ion-item>
       </ion-list>
 
-      <ion-infinite-scroll on-infinite="loadMore()"></ion-infinite-scroll>
+      <!-- <ion-infinite-scroll on-infinite="loadMore()"></ion-infinite-scroll> -->
 
     </ion-content>
-    <div id="stats" style="pointer-events: none; position: absolute; bottom: 0; left: 0; right: 0; height: 100px; background: rgba(0,0,0,0.3); color: white;">
+    <div id="stats" style="pointer-events: none; position: absolute; bottom: 0; left: 0; right: 0; height: 120px; background: rgba(0,0,0,0.25); color: white;">
     </div>
   <script>
 var stats = document.getElementById('stats');
@@ -51,7 +55,7 @@ function MainCtrl($scope, $ionicScrollDelegate, $timeout, $q, $ionicLoading, $io
       image: 'http://placekitten.com/'+(100+50%i)+'/'+(100+50%i)
     });
   }
-  for (var i = 0; i < 20; i++) addImage();
+  for (var i = 0; i < 2000; i++) addImage();
 
   $scope.scrollBottom = function() {
     $ionicScrollDelegate.scrollBottom(true);
@@ -63,7 +67,7 @@ function MainCtrl($scope, $ionicScrollDelegate, $timeout, $q, $ionicLoading, $io
       for (var i = 0; i < n; i++) addImage();
       $scope.$broadcast('scroll.infiniteScrollComplete');
       $scope.$broadcast('scroll.refreshComplete');
-    }, 1);
+    }, 500);
   };
 
   $scope.openModal = function() {
